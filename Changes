@@ -14,3 +14,11 @@ Revision history for Perl extension Text::xSV.
 	- Make empty unquoted strings null
 	- Fix bug that was hidden by a 5.005_03 bug
 	- Add success tests
+0.06  Sat Nov  1 23:45:00 PST 2003
+        - Fix misnaming of bind_header in documentation
+        - Apply patch from Klaus Weidner <kw@w-m-p.com>
+          for segmentation faults on large fields
+        - Switch to Module::Build
+        - Add alias, delete, get_fields.
+        - Add support for arbitrary computed fields with
+          add_compute.

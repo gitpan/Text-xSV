@@ -1,0 +1,30 @@
+#!/usr/bin/perl
+
+BEGIN {
+  $^W = 1;  # Use warnings
+  my $start_dir = '/home/tilly/my_code/Text-xSV';
+  chdir($start_dir) or die "Cannot chdir to $start_dir: $!";
+  @INC = 
+    (
+     '/etc/perl',
+     '/usr/local/lib/perl/5.8.0',
+     '/usr/local/share/perl/5.8.0',
+     '/usr/lib/perl5',
+     '/usr/share/perl5',
+     '/usr/lib/perl/5.8.0',
+     '/usr/share/perl/5.8.0',
+     '/usr/local/lib/site_perl',
+     '/home/tilly/my_code/Text-xSV'
+    );
+}
+
+use Module::Build;
+
+# This should have just enough arguments to be able to bootstrap the rest.
+my $build = resume Module::Build (
+  properties => {
+    config_dir => '/home/tilly/my_code/Text-xSV/_build',
+  },
+);
+
+$build->dispatch;

@@ -1,7 +1,28 @@
 package Text::xSV;
-$VERSION = 0.05;
+$VERSION = 0.06;
 use strict;
 use Carp;
+use vars qw(%in_compute);
+
+sub alias {
+  my ($self, $from, $to) = @_;
+  my $field_pos = $self->{field_pos}
+    or confess("Can't call alias before headers are bound");
+  unless (exists $field_pos->{$from}) {
+    confess("'$from' is not available to alias");
+  }
+  $field_pos->{$to} = $field_pos->{$from};
+}
+
+sub add_compute {
+  my ($self, $name, $compute) = @_;
+  my $field_pos = $self->{field_pos}
+    or confess("Can't call add_compute before headers are bound");
+  unless (UNIVERSAL::isa($compute, "CODE")) {
+    confess('Usage: $csv->add_compute("name", sub {FUNCTION});');
+  }
+  $field_pos->{$name} = $compute;
+}
 
 sub bind_fields {
   my $self = shift;
@@ -18,15 +39,45 @@ sub bind_header {
   delete $self->{row};
 }
 
+sub delete {
+  my $self = shift;
+  my $field_pos = $self->{field_pos}
+    or confess("Can't call delete before headers are bound");
+  foreach my $field (@_) {
+    if (exists $field_pos->{$field}) {
+      delete $field_pos->{$field};
+    }
+    else {
+      confess("Cannot delete field '$field': it doesn't exist");
+    }
+  }
+}
+
 sub extract {
   my $self = shift;
+  my $cached_results = $self->{cached} ||= {};
   my $row = $self->{row} or confess("No row found (did you call get_row())?");
   my $lookup = $self->{field_pos}
     or confess("Can't find field info (did you bind_fields or bind_header?)");
   my @data;
   foreach my $field (@_) {
     if (exists $lookup->{$field}) {
-      push @data, $row->[$lookup->{$field}];
+      my $position_or_compute = $lookup->{$field};
+      if (not ref($position_or_compute)) {
+        push @data, $row->[$position_or_compute];
+      }
+      elsif (exists $cached_results->{$field}) {
+        push @data, $cached_results->{$field};
+      }
+      elsif (exists $in_compute{$field}) {
+        confess("Infinite recursion detected in computing '$field'");
+      }
+      else {
+        # Have to do compute
+        local $in_compute{$field} = 1;
+        $cached_results->{$field} = $position_or_compute->($self);
+        push @data, $cached_results->{$field};
+      }
     }
     else {
       my @allowed = sort keys %$lookup;
@@ -39,6 +90,13 @@ sub extract {
   return wantarray ? @data : \@data;
 }
 
+sub get_fields {
+  my $self = shift;
+  my $field_pos = $self->{field_pos}
+    or confess("Can't call get_fields before headers are bound");
+  return keys %$field_pos;
+}
+
 # Private block for shared variables in a small "parse engine".
 # The concept here is to use pos to step through a string.
 # This is the real engine, all else is syntactic sugar.
@@ -48,6 +106,7 @@ sub extract {
   sub get_row {
     $self = shift;
     delete $self->{row};
+    delete $self->{cached};
     $fh = $self->{fh};
     defined($line = <$fh>) or return;
     if (exists $self->{filter}) {
@@ -101,10 +160,16 @@ sub extract {
     my $piece = "";
     my $start_line = $.;
     my $start_pos = pos($line);
-    while ($line =~ /\G((?:[^"]|"")*)/g) {
-      $piece .= $1;
-      if ($line =~ /\G"/g) {
-        $piece =~ s/""/"/g;
+  
+    while(1) {
+      if ($line =~ /\G([^"]+)/gc) {
+        # sequence of non-quote characters
+        $piece .= $1;
+      } elsif ($line =~ /\G""/gc) {
+        # replace "" with "
+        $piece .= '"';
+      } elsif ($line =~ /\G"/g) {
+        # closing quote
         return $piece;  # EXIT HERE
       }
       else {
@@ -190,9 +255,24 @@ Text::xSV - read character separated files
   my $csv = new Text::xSV;
   $csv->open_file("foo.csv");
   $csv->bind_header();
+  # Make the headers case insensitive
+  foreach my $field ($csv->get_fields) {
+    if (lc($field) ne $field) {
+      $csv->alias($field, lc($field));
+    }
+  }
+  
+  $csv->add_compute("message", sub {
+    my $csv = shift;
+    my ($name, $age) = $csv->extract(qw(name age));
+    return "$name is $age years old\n";
+  });
+
   while ($csv->get_row()) {
     my ($name, $age) = $csv->extract(qw(name age));
     print "$name is $age years old\n";
+    # Same as
+    #   print $csv->extract("message");
   }
 
 =head1 DESCRIPTION
@@ -263,9 +343,9 @@ Takes the name of a file, opens it, then sets the filename and fh.
 =item C<bind_fields>
 
 Takes an array of fieldnames, memorizes the field positions for later
-use.  C<bind_headers> is preferred.
+use.  C<bind_header> is preferred.
 
-=item C<bind_headers>
+=item C<bind_header>
 
 Reads a row from the file as a header line and memorizes the positions
 of the fields for later use.  File formats that carry field information
@@ -280,9 +360,43 @@ later access.
 
 =item C<extract>
 
-Extracts a list of fields out of the last row read.
+Extracts a list of fields out of the last row read.  In list context
+returns the list, in scalar context returns an anonymous array.
+
+=item C<alias>
+
+Makes an existing field available under a new name.
+
+  $csv->alias($old_name, $new_name);
+
+=item C<get_fields>
+
+Returns a list of all known fields in no particular order.
+
+=item C<add_compute>
+
+Adds an arbitrary compute.  A compute is an arbitrary anonymous
+function.  When the computed field is extracted, Text::xSV will call
+the compute in scalar context with the Text::xSV object as the only
+argument.
+
+Text::xSV caches results in case computes call other computes.  It
+will also catch infinite recursion with a hopefully useful message.
 
 =back
+
+=head1 TODO
+
+Allow blank fields at the end to be optionally undef?  (Requested by
+Chad Simmons.)
+
+Think through a writing interface.  (Suggested by dragonchild on
+perlmonks.)
+
+Add utility interfaces.  (Suggested by Ken Clark.)
+
+Offer an option for working around the broken tab-delimited output
+that some versions of Excel present for cut-and-paste.
 
 =head1 BUGS
 
@@ -303,7 +417,12 @@ those is slow.
 I need to find out what conversions are done by Microsoft products
 that Perl won't do on the fly upon trying to use the values.
 
-I need a real test suite.
+=head1 ACKNOWLEDGEMENTS
+
+My thanks to people who have given me feedback on how they would like
+to use this module, and particularly to Klaus Weidner for his patch
+fixing a nasty segmentation fault from a stack overflow in the regular
+expression engine on large fields.
 
 =head1 AUTHOR AND COPYRIGHT
 

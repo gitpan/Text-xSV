@@ -6,7 +6,7 @@
 # Change 1..1 below to 1..last_test_to_print .
 # (It may become useful if the test is moved to ./t subdirectory.)
 
-BEGIN { $| = 1; print "1..11\n"; }
+BEGIN { $| = 1; print "1..27\n"; }
 END {print "not ok 1\n" unless $loaded;}
 use Text::xSV;
 $loaded = 1;
@@ -37,10 +37,66 @@ ok();
 (("hello" eq $results[0] and "world" eq $results[1]))
   ? ok() : not_ok();
 
+# The field "One" is missing..until I make that an alias.
+eval {
+  $csv->extract("One");
+};
+$@ ? ok() : not_ok();
+$csv->alias("one", "One");
+ok();
+(($csv->extract("One"))[0] eq "hello")
+  ? ok()
+  : not_ok();
+$csv->delete("One");
+ok();
+eval {
+  $csv->extract("One");
+};
+$@ ? ok() : not_ok();
+my $called = 0;
+$csv->add_compute("full message", sub {
+  my $self = shift;
+  $called++;
+  return join " ", map {
+    defined($_) ? $_ : "<undef>"
+  } $self->extract("one", "two");
+});
+ok();
+(($csv->extract("full message"))[0] eq "hello world")
+  ? ok() : not_ok();
+# Test that deep recursion doesn't stop me from calling it again.
+$csv->extract("full message");
+ok();
+# Caching works?
+(1== $called) ? ok() : not_ok();
+
+my @headers = $csv->get_fields;
+ok();
+@headers = sort @headers;
+("@headers" eq "full message one test two")
+  ? ok() : not_ok();
+
+# I should catch infinite recursion
+$csv->add_compute("recurse", sub {(shift)->extract("recurse")});
+eval {
+  $csv->extract("recurse");
+};
+($@ =~ m/^Infinite recursion detected/)
+  ? ok() : not_ok();
+
 test_row(undef, undef);
+# And caching does not carry across rows
+(($csv->extract("full message"))[0] eq "<undef> <undef>")
+  ? ok() : not_ok();
+
 test_row("hello", "world");
 test_row("return\nhere","quotes\"here");
 test_row("","");
+test_row("",undef);
+
+test_row("abcd" x 2000, "1234");
+test_row("abcd" x 100000, "ABCD");
+
 # end of file
 $csv->get_row() ? not_ok() : ok();
 
@@ -78,5 +134,6 @@ sub test_row {
     not_ok();
     return;
   } 
+  #print STDERR $csv->extract("test"), "\n";
   test_arrays_match([@_], [$csv->extract("one", "two")]);
 }
