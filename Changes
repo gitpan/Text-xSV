@@ -10,3 +10,7 @@ Revision history for Perl extension Text::xSV.
         - Add filter
         - Slightly improved warnings
         - Put on CPAN
+0.05  Sun Jun 3 10:00 2001
+	- Make empty unquoted strings null
+	- Fix bug that was hidden by a 5.005_03 bug
+	- Add success tests

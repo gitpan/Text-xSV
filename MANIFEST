@@ -3,4 +3,5 @@ xSV.pm
 MANIFEST
 Makefile.PL
 test.pl
+test.csv
 README

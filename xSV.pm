@@ -1,5 +1,5 @@
 package Text::xSV;
-$VERSION = 0.04;
+$VERSION = 0.05;
 use strict;
 use Carp;
 
@@ -72,7 +72,7 @@ sub extract {
     my @row;
     my $q_sep = quotemeta($self->{sep});
     my $match_sep = qr/\G$q_sep/;
-    my $start_field = qr/\G(")|([^"$q_sep]*)/;
+    my $start_field = qr/\G(")|\G([^"$q_sep]*)/;
 
     # This loop is the heart of the engine
     while ($line =~ /$start_field/g) {
@@ -80,7 +80,8 @@ sub extract {
         push @row, _get_quoted();
       }
       else {
-        push @row, $2;
+        # Needed for Microsoft compatibility
+        push @row, length($2) ? $2 : undef;
       }
       my $pos = pos($line);
       if ($line !~ /$match_sep/g) {
@@ -205,7 +206,14 @@ The format is a series of rows separated by returns.  Within each row
 you have a series of fields separated by your character separator.
 Fields may either be unquoted, in which case they do not contain a
 double-quote, separator, or return, or they are quoted, in which case
-they may contain everything, and will pair double-quotes.
+they may contain anything, and will encode double-quotes by pairing
+them.  In Microsoft products, quoted fields are strings and unquoted
+fields can be interpreted as being of various datatypes based on a
+set of heuristics.  By and large this fact is irrelevant in Perl
+because Perl is largely untyped.  The one exception that this module
+handles that empty unquoted fields are treated as nulls which are
+represented in Perl as undefined values.  If you want a zero-length
+string, quote it.
 
 People usually naively solve this with split.  A next step up is to
 read a line and parse it.  Unfortunately this choice of interface
@@ -217,7 +225,7 @@ This module solves the problem by creating a CSV object with access to
 the filehandle, if in parsing it notices that a new line is needed, it
 can read at will.
 
-=head1 DESCRIPTION
+=head1 USAGE
 
 First you set up and initialize an object, then you read the CSV file
 through it.  The creation can also do multiple initializations as
@@ -291,6 +299,11 @@ $`, $&, or $', you will find that it can get much, much slower.  The
 cause of this problem is that Perl only calculates those if it has
 ever seen one of those.  This does many, many matches and calculating
 those is slow.
+
+I need to find out what conversions are done by Microsoft products
+that Perl won't do on the fly upon trying to use the values.
+
+I need a real test suite.
 
 =head1 AUTHOR AND COPYRIGHT
 
