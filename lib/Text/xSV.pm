@@ -1,14 +1,15 @@
 package Text::xSV;
-$VERSION = 0.07;
+$VERSION = 0.08;
 use strict;
 use Carp;
 
 sub alias {
   my ($self, $from, $to) = @_;
   my $field_pos = $self->{field_pos}
-    or confess("Can't call alias before headers are bound");
+    or return $self->{error_handler}->(
+      "Can't call alias before headers are bound");
   unless (exists $field_pos->{$from}) {
-    confess("'$from' is not available to alias");
+    return $self->{error_handler}->("'$from' is not available to alias");
   }
   $field_pos->{$to} = $field_pos->{$from};
 }
@@ -16,9 +17,11 @@ sub alias {
 sub add_compute {
   my ($self, $name, $compute) = @_;
   my $field_pos = $self->{field_pos}
-    or confess("Can't call add_compute before headers are bound");
+    or return $self->{error_handler}->(
+      "Can't call add_compute before headers are bound");
   unless (UNIVERSAL::isa($compute, "CODE")) {
-    confess('Usage: $csv->add_compute("name", sub {FUNCTION});');
+    return $self->{error_handler}->(
+      'Usage: $csv->add_compute("name", sub {FUNCTION});');
   }
   $field_pos->{$name} = $compute;
 }
@@ -41,13 +44,15 @@ sub bind_header {
 sub delete {
   my $self = shift;
   my $field_pos = $self->{field_pos}
-    or confess("Can't call delete before headers are bound");
+    or return $self->{error_handler}->(
+      "Can't call delete before headers are bound");
   foreach my $field (@_) {
     if (exists $field_pos->{$field}) {
       delete $field_pos->{$field};
     }
     else {
-      confess("Cannot delete field '$field': it doesn't exist");
+      $self->{error_handler}->(
+        "Cannot delete field '$field': it doesn't exist");
     }
   }
 }
@@ -56,9 +61,11 @@ sub extract {
   my $self = shift;
   my $cached_results = $self->{cached} ||= {};
   my $in_compute = $self->{in_compute} ||= {};
-  my $row = $self->{row} or confess("No row found (did you call get_row())?");
+  my $row = $self->{row} or return $self->{error_handler}->(
+    "No row found (did you call get_row())?");
   my $lookup = $self->{field_pos}
-    or confess("Can't find field info (did you bind_fields or bind_header?)");
+    or return $self->{error_handler}->(
+      "Can't find field info (did you bind_fields or bind_header?)");
   my @data;
   foreach my $field (@_) {
     if (exists $lookup->{$field}) {
@@ -70,7 +77,8 @@ sub extract {
         push @data, $cached_results->{$field};
       }
       elsif ($in_compute->{$field}) {
-        confess("Infinite recursion detected in computing '$field'");
+        $self->{error_handler}->(
+          "Infinite recursion detected in computing '$field'");
       }
       else {
         # Have to do compute
@@ -81,7 +89,7 @@ sub extract {
     }
     else {
       my @allowed = sort keys %$lookup;
-      confess(
+      $self->{error_handler}->(
         "Invalid field $field for file '$self->{filename}'.\n" .
         "Valid fields are: (@allowed)\n"
       );
@@ -90,10 +98,25 @@ sub extract {
   return wantarray ? @data : \@data;
 }
 
+sub extract_hash {
+  my $self = shift;
+  my @fields = $self->get_fields();
+  my %hash;
+  @hash{@fields} = $self->extract(@fields);
+  wantarray ? %hash : \%hash;
+}
+
+sub fetchrow_hash {
+  my $self = shift;
+  $self->get_row();
+  $self->extract_hash();
+}
+
 sub get_fields {
   my $self = shift;
   my $field_pos = $self->{field_pos}
-    or confess("Can't call get_fields before headers are bound");
+    or return $self->{error_handler}->(
+      "Can't call get_fields before headers are bound");
   return keys %$field_pos;
 }
 
@@ -101,27 +124,35 @@ sub get_fields {
 # The concept here is to use pos to step through a string.
 # This is the real engine, all else is syntactic sugar.
 {
-  my ($self, $fh, $line);
+  my ($self, $fh, $line, $is_error);
 
   sub get_row {
     $self = shift;
+    $is_error = 0;
     delete $self->{row};
     delete $self->{cached};
     delete $self->{in_compute};
     $fh = $self->{fh};
     defined($line = <$fh>) or return;
-    if (exists $self->{filter}) {
+    if ($self->{filter}) {
       $line = $self->{filter}->($line);
     }
     chomp($line);
     my @row = _get_row();
+    if ($is_error) {
+      return @row[0..$#row];
+    }
     if (not exists $self->{row_size}) {
       $self->{row_size} = @row;
     }
     elsif ($self->{row_size} != @row) {
       my $new = @row;
       my $where = "Line $., file $self->{filename}";
-      carp( "$where had $new fields, expected $self->{row_size}" ); 
+      eval {
+        $self->{error_handler}->(
+          "$where had $new fields, expected $self->{row_size}" ); 
+      };
+      warn($@) if $@;
       $self->{row_size} = $new;
     }
     $self->{row} = \@row;
@@ -150,11 +181,15 @@ sub get_fields {
         }
         else {
           my $expected = "Expected '$self->{sep}'";
-          confess("$expected at $self->{filename}, line $., char $pos");
+          $is_error = 1;
+          return $self->{error_handler}->(
+            "$expected at $self->{filename}, line $., char $pos");
         }
       }
     }
-    confess("I have no idea how parsing $self->{filename} left me here!");
+    $is_error = 1;
+    $self->{error_handler}->(
+      "I have no idea how parsing $self->{filename} left me here!");
   }
 
   sub _get_quoted {
@@ -182,20 +217,25 @@ sub get_fields {
               . "Field started at char $start_pos, line $start_line\n"
           );
         }
-        if (exists $self->{filter}) {
+        if ($self->{filter}) {
           $line = $self->{filter}->($line);
         }
         chomp($line);
       }
     }
-    confess("I have no idea how parsing $self->{filename} left me here!");
+    $self->{error_handler}->(
+      "I have no idea how parsing $self->{filename} left me here!");
   }
 }
 
 sub new {
   my $self = bless ({'sep' => ","}, shift);
-  my %allowed = map {($_, 1)} qw(filename fh filter sep);
-  my %args = @_;
+  my %allowed = map {($_, 1)} qw(error_handler filename fh filter sep);
+  my %args = (
+    error_handler => \&confess,
+    filter => sub {my $line = shift; $line =~ s/\r$//; $line;},
+    @_
+  );
   foreach my $arg (keys %args) {
     unless (exists $allowed{$arg}) {
       my @allowed = sort keys %allowed;
@@ -214,10 +254,14 @@ sub open_file {
   my $self = shift;
   my $file = $self->{filename} = shift;
   my $fh = do {local *FH}; # Old trick, not needed in 5.6
-  open ($fh, "< $file") or confess("Cannot read '$file': $!");
+  open ($fh, "< $file") or return $self->{error_handler}->(
+    "Cannot read '$file': $!");
   $self->{fh} = $fh;
 }
 
+sub set_error_handler {
+  $_[0]->{error_handler} = $_[1];
+}
 
 sub set_fh {
   $_[0]->{fh} = $_[1];
@@ -238,7 +282,7 @@ sub set_sep {
     $self->{sep} = $sep;
   }
   else {
-    confess("The separator '$sep' is not of length 1");
+    $self->{error_handler}->("The separator '$sep' is not of length 1");
   }
 }
 
@@ -318,14 +362,25 @@ well.  Here are the available methods
 
 This is the constructor.  It takes a hash of optional arguments.
 They are the I<filename> of the CSV file you are reading, the
-I<fh> through which you read, an optional filter and the one
-character I<sep> that you are using.  If the filename is passed
-and the fh is not, then it will open a filehandle on that file
-and sets the fh accordingly.  The separator defaults to a comma.
-If the filter is present the lines will be passed through it
-as they are read.  This is useful for stripping off \r, and
-for stripping out things like Microsoft smart quotes at the
-source.
+I<fh> through which you read, an optional I<filter>, the
+I<error_handler> that is called for errors, and the one character
+I<sep> that you are using.  If the filename is passed and the fh
+is not, then it will open a filehandle on that file and sets the
+fh accordingly.  The separator defaults to a comma.
+
+The filter is an anonymous function which is expected to
+accept a line of input, and return a filtered line of output.  The
+default filter removes \r so that Windows files can be read under
+Unix.  This could also be used to, eg, strip out Microsoft smart
+quotes.
+
+The error handler is an anonymous function which is expected to
+take an error message and do something useful with it.  The
+default error handler just calls Carp::confess.  Error handlers
+that do not trip exceptions (eg with die) are less tested and may
+not work perfectly in all circumstances.
+
+=item C<set_error_handler>
 
 =item C<set_filename>
 
@@ -363,6 +418,16 @@ later access.
 
 Extracts a list of fields out of the last row read.  In list context
 returns the list, in scalar context returns an anonymous array.
+
+=item C<extract_hash>
+
+Extracts all fields that it knows about into a hash.  In list context
+returns the hash.  In scalar context returns a reference to the hash.
+
+=item C<fetchrow_hash>
+
+Combines get_row and extract_hash to fetch the next row and return a
+hash or hashref depending on context.
 
 =item C<alias>
 
@@ -430,5 +495,5 @@ expression engine on large fields.
 Ben Tilly (ben_tilly@operamail.com).  Originally posted at
 http://www.perlmonks.org/node_id=65094.
 
-Copyright 2001.  This may be modified and distributed on the same
+Copyright 2001-2003.  This may be modified and distributed on the same
 terms as Perl.

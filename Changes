@@ -28,3 +28,9 @@ Revision history for Perl extension Text::xSV.
           "local").  The fix also avoids a theroetical bug
           that I had not thought through with multiple xSV
           objects whose computes call each other.
+0.08 Sun Dec  7 11:49:39 PST 2003
+        - Made it ignore \r by default (helps *nix users who
+          are reading Windows files).
+        - Allow people to set arbitrary error handling routines.
+        - Added extract_hash and fetchrow_hash utility
+          functions.  I may add more of these later.

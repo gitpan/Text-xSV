@@ -6,7 +6,7 @@
 # Change 1..1 below to 1..last_test_to_print .
 # (It may become useful if the test is moved to ./t subdirectory.)
 
-BEGIN { $| = 1; print "1..27\n"; }
+BEGIN { $| = 1; print "1..36\n"; }
 END {print "not ok 1\n" unless $loaded;}
 use Text::xSV;
 $loaded = 1;
@@ -36,6 +36,19 @@ ok();
 
 (("hello" eq $results[0] and "world" eq $results[1]))
   ? ok() : not_ok();
+
+my %hash = $csv->extract_hash();
+ok();
+
+(("hello" eq $hash{one} and "world" eq $hash{two}))
+  ? ok() : not_ok();
+
+my $hash_ref = $csv->extract_hash();
+ok();
+
+(("hello" eq $hash_ref->{one} and "world" eq $hash_ref->{two}))
+  ? ok() : not_ok();
+
 
 # The field "One" is missing..until I make that an alias.
 eval {
@@ -97,6 +110,24 @@ test_row("",undef);
 test_row("abcd" x 2000, "1234");
 test_row("abcd" x 100000, "ABCD");
 
+# And now test the fetchrow version, but we will still have
+# the above deep recursion error so...
+my $error;
+
+$csv->set_error_handler( sub {$error = shift} );
+ok();
+
+my %hash = $csv->fetchrow_hash();
+ok();
+
+(("hello" eq $hash{one} and "world" eq $hash{two}))
+  ? ok() : not_ok();
+
+$hash{"full message"} eq "hello world"
+  ? ok() : not_ok();
+
+($error =~ /Infinite recursion/) ? ok() : not_ok();
+
 # end of file
 $csv->get_row() ? not_ok() : ok();
 
@@ -120,7 +151,11 @@ sub test_arrays_match {
   foreach (0..$#$ary_1) {
     if (
       defined($ary_1->[$_]) != defined($ary_2->[$_])
-        or $ary_1->[$_] ne $ary_2->[$_]
+        or (
+        defined($ary_1->[$_])
+          and
+        $ary_1->[$_] ne $ary_2->[$_]
+      )
     ) {
       not_ok();
       return;
