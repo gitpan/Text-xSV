@@ -1,15 +1,15 @@
 package Text::xSV;
-$VERSION = 0.10;
+$VERSION = 0.11;
 use strict;
 use Carp;
 
 sub alias {
   my ($self, $from, $to) = @_;
   my $field_pos = $self->{field_pos}
-    or return $self->{error_handler}->(
+    or return $self->error_handler(
       "Can't call alias before headers are bound");
   unless (exists $field_pos->{$from}) {
-    return $self->{error_handler}->("'$from' is not available to alias");
+    return $self->error_handler("'$from' is not available to alias");
   }
   $field_pos->{$to} = $field_pos->{$from};
 }
@@ -17,10 +17,10 @@ sub alias {
 sub add_compute {
   my ($self, $name, $compute) = @_;
   my $field_pos = $self->{field_pos}
-    or return $self->{error_handler}->(
+    or return $self->error_handler(
       "Can't call add_compute before headers are bound");
   unless (UNIVERSAL::isa($compute, "CODE")) {
-    return $self->{error_handler}->(
+    return $self->error_handler(
       'Usage: $csv->add_compute("name", sub {FUNCTION});');
   }
   $field_pos->{$name} = $compute;
@@ -40,19 +40,20 @@ sub bind_header {
   $self->bind_fields($self->get_row());
 }
 
-*bind_headers = \&bind_header;
+*read_headers = \&bind_header;
+*read_header = \&bind_header;
 
 sub delete {
   my $self = shift;
   my $field_pos = $self->{field_pos}
-    or return $self->{error_handler}->(
+    or return $self->error_handler(
       "Can't call delete before headers are bound");
   foreach my $field (@_) {
     if (exists $field_pos->{$field}) {
       delete $field_pos->{$field};
     }
     else {
-      $self->{error_handler}->(
+      $self->error_handler(
         "Cannot delete field '$field': it doesn't exist");
     }
   }
@@ -67,11 +68,11 @@ sub extract {
   my $self = shift;
   my $cached_results = $self->{cached} ||= {};
   my $in_compute = $self->{in_compute} ||= {};
-  my $row = $self->{row} or return $self->{error_handler}->(
+  my $row = $self->{row} or return $self->error_handler(
     "No row found (did you call get_row())?");
   my $lookup = $self->{field_pos}
-    or return $self->{error_handler}->(
-      "Can't find field info (did you bind_fields or bind_header?)");
+    or return $self->error_handler(
+      "Can't find field info (did you bind_fields or read_header?)");
   my @data;
   foreach my $field (@_) {
     if (exists $lookup->{$field}) {
@@ -83,7 +84,7 @@ sub extract {
         push @data, $cached_results->{$field};
       }
       elsif ($in_compute->{$field}) {
-        $self->{error_handler}->(
+        $self->error_handler(
           "Infinite recursion detected in computing '$field'");
       }
       else {
@@ -95,7 +96,7 @@ sub extract {
     }
     else {
       my @allowed = sort keys %$lookup;
-      $self->{error_handler}->(
+      $self->error_handler(
         "Invalid field $field for file '$self->{filename}'.\n" .
         "Valid fields are: (@allowed)\n"
       );
@@ -123,7 +124,7 @@ sub format_data {
   my %data = @_;
   my @row;
   my $field_pos = $self->{field_pos} or $self->error_handler(
-    "Can't find field info (did you bind_fields or bind_header?)"
+    "Can't find field info (did you bind_fields or read_header?)"
   );
   while (my ($field, $value) = each %data) {
     my $pos = $field_pos->{$field};
@@ -131,10 +132,7 @@ sub format_data {
       $row[$pos] = $value;
     }
     else {
-      eval {
-        $self->error_handler("Ignoring unknown field '$field'");
-      };
-      warn $@ if $@;
+      $self->warning_handler("Ignoring unknown field '$field'");
     }
   }
   $self->{row} = \@row;
@@ -149,7 +147,7 @@ sub format_header {
     return $self->format_row(@{$self->{header}});
   }
   else {
-    $self->{error_handler}->("Cannot format_header when no header is set");
+    $self->error_handler("Cannot format_header when no header is set");
   }
 }
 
@@ -166,13 +164,10 @@ sub format_row {
     }
     elsif ( @_ != $self->{row_size}) {
       my $count = @_;
-      eval {
-        $self->error_handler(
-          "Formatting $count fields at row $self->{row_num}, "
-          . "expected $self->{row_size}"
-        ); 
-      };
-      warn $@ if $@;
+      $self->warning_handler(
+        "Formatting $count fields at row $self->{row_num}, "
+        . "expected $self->{row_size}"
+      ); 
     }
   }
 
@@ -205,7 +200,7 @@ sub format_row {
 sub get_fields {
   my $self = shift;
   my $field_pos = $self->{field_pos}
-    or return $self->{error_handler}->(
+    or return $self->error_handler(
       "Can't call get_fields before headers are bound");
   return keys %$field_pos;
 }
@@ -225,9 +220,10 @@ sub get_fields {
     $fh = ($self->{fh}
       ||= $self->{filename}
         ? $self->open_file($self->{filename}, "<")
-        : ($self->{filename} = "STDIN" and \*STDIN)
+        : ($self->{filename} = "STDIN", \*STDIN)
         # Sorry for the above convoluted way to sneak in defining filename.
     );
+    return unless $fh;
     defined($line = <$fh>) or return;
     if ($self->{filter}) {
       $line = $self->{filter}->($line);
@@ -246,11 +242,8 @@ sub get_fields {
     elsif ($self->{row_size} != @row) {
       my $new = @row;
       my $where = "Line $., file $self->{filename}";
-      eval {
-        $self->{error_handler}->(
-          "$where had $new fields, expected $self->{row_size}" ); 
-      };
-      warn($@) if $@;
+      $self->warning_handler(
+        "$where had $new fields, expected $self->{row_size}" ); 
     }
     $self->{row} = \@row;
     return wantarray ? @row : [@row];
@@ -279,13 +272,13 @@ sub get_fields {
         else {
           my $expected = "Expected '$self->{sep}'";
           $is_error = 1;
-          return $self->{error_handler}->(
+          return $self->error_handler(
             "$expected at $self->{filename}, line $., char $pos");
         }
       }
     }
     $is_error = 1;
-    $self->{error_handler}->(
+    $self->error_handler(
       "I have no idea how parsing $self->{filename} left me here!");
   }
 
@@ -320,13 +313,15 @@ sub get_fields {
         chomp($line);
       }
     }
-    $self->{error_handler}->(
+    $is_error = 1;
+    $self->error_handler(
       "I have no idea how parsing $self->{filename} left me here!");
   }
 }
 
 my @normal_accessors = qw(
-  error_handler filename filter fh row_size row_size_warning sep
+  close_fh error_handler warning_handler filename filter fh
+  row_size row_size_warning
 );
 foreach my $accessor (@normal_accessors) {
   no strict 'refs';
@@ -341,9 +336,16 @@ sub new {
 
   my %args = (
     error_handler => \&confess,
+    warning_handler => sub {
+      eval {
+        $self->error_handler(@_);
+      };
+      warn $@ if $@;
+    },
     filter => sub {my $line = shift; $line =~ s/\r$//; $line;},
     sep => ",",
     row_size_warning => 1,
+    close_fh => 0,
     @_
   );
   foreach my $arg (keys %args) {
@@ -360,9 +362,10 @@ sub new {
 # Note the undocumented third argument for the mode.  Most of the time this
 # will do what is wanted without requiring Perl 5.6 or better.  Users who
 # supply their own metacharacters will also not be surprised at the result.
+# Note the return of 0.  I cannot assume that the user's error handler dies...
 sub open_file {
   my $self = shift;
-  my $file = $self->{filename} = shift || return $self->{error_handler}->(
+  my $file = $self->{filename} = shift || return $self->error_handler(
     "No filename specified at open_file"
   );
   if ($file !~ /\||<|>/ and @_) {
@@ -370,8 +373,11 @@ sub open_file {
     $file = "$mode $file";
   }
   my $fh = do {local *FH}; # Old trick, not needed in 5.6
-  open ($fh, $file) or return $self->{error_handler}->(
-    "Cannot open '$file': $!");
+  unless (open ($fh, $file)) {
+    $self->error_handler("Cannot open '$file': $!");
+    return 0;
+  }
+  $self->{close_fh} = 1;
   $self->{fh} = $fh;
 }
 
@@ -381,9 +387,10 @@ sub print {
   my $fh = ($self->{fh}
       ||= $self->{filename}
         ? $self->open_file($self->{filename}, ">")
-        : ($self->{filename} = "STDOUT" and \*STDOUT)
+        : ($self->{filename} = "STDOUT", \*STDOUT)
         # Sorry for the above convoluted way to sneak in defining filename.
       );
+  return unless $fh;
   print $fh @_ or $self->error_handler( "Print #$self->{row_out}: $!" );
 }
 
@@ -426,14 +433,19 @@ sub set_sep {
     $self->{sep} = $sep;
   }
   else {
-    $self->{error_handler}->("The separator '$sep' is not of length 1");
+    $self->error_handler("The separator '$sep' is not of length 1");
   }
+}
+
+sub warning_handler {
+  my $self = shift;
+  $self->{warning_handler}->(@_);
 }
 
 sub DESTROY {
   my $self = shift;
-  if ($self->{fh}) {
-    close($self->{fh}) or $self->{error_handler}->(
+  if ($self->{close_fh}) {
+    close($self->{fh}) or $self->error_handler(
       $! ? "Cannot close '$self->{filename}': $!"
          : "Exit status $? closing '$self->{filename}'"
     );
@@ -453,7 +465,7 @@ Text::xSV - read character separated files
   use Text::xSV;
   my $csv = new Text::xSV;
   $csv->open_file("foo.csv");
-  $csv->bind_header();
+  $csv->read_header();
   # Make the headers case insensitive
   foreach my $field ($csv->get_fields) {
     if (lc($field) ne $field) {
@@ -476,16 +488,16 @@ Text::xSV - read character separated files
 
   # The file above could have been created with:
   my $csv = Text::xSV->new(
-    filename => "> foo.csv",
-    header   => ["name", "age", "sex"],
+    filename => "foo.csv",
+    header   => ["Name", "Age", "Sex"],
   );
   $csv->print_header();
   $csv->print_row("Ben Tilly", 34, "M");
   # Same thing.
   $csv->print_data(
-    age  => 34,
-    name => "Ben Tilly",
-    sex  => "M",
+    Age  => 34,
+    Name => "Ben Tilly",
+    Sex  => "M",
   );
 
 =head1 DESCRIPTION
@@ -576,6 +588,13 @@ default error handler is Carp::confess.  Error handlers that do
 not trip exceptions (eg with die) are less tested and may not work
 perfectly in all circumstances.
 
+=item C<set_warning_handler>
+
+The warning handler is an anonymous function which is expected to
+take a warning and do something useful with it.  The default
+warning handler just wraps the error_handler in C<eval> and
+passes along $@.
+
 =item C<set_filter>
 
 The filter is an anonymous function which is expected to
@@ -598,6 +617,12 @@ has a number of fields different than the expected number.  Defaults
 to true.  Whether or not this is on, missing fields are always read
 as undef, and extra fields are ignored.
 
+=item C<set_close_fh>
+
+Whether or not to close fh when the object is DESTROYed.  Defaults
+to false if fh was passed in, or true if the object has to open its
+own fh.  (This may be removed in a future version.)
+
 =back
 
 =item C<open_file>
@@ -607,19 +632,25 @@ Takes the name of a file, opens it, then sets the filename and fh.
 =item C<bind_fields>
 
 Takes an array of fieldnames, memorizes the field positions for later
-use.  C<bind_header> is preferred.
+use.  C<read_header> is preferred.
 
-=item C<bind_header>
+=item C<read_header>
 
 Reads a row from the file as a header line and memorizes the positions
 of the fields for later use.  File formats that carry field information
 tend to be far more robust than ones which do not, so this is the
 preferred function.
 
-=item C<bind_headers>
+=item C<read_headers>
 
-An alias for C<bind_header>.  (If I'm going to keep on typing the plural,
+An alias for C<read_header>.  (If I'm going to keep on typing the plural,
 I'll just make it work...)
+
+=item C<bind_header>
+
+Another alias for C<read_header> maintained for backwards compatibility.
+Deprecated because the name doesn't distinguish it well enough from the
+unrelated C<set_header>.
 
 =item C<get_row>
 
@@ -670,7 +701,7 @@ sep, with a newline at the end.
 =item C<format_header>
 
 Returns the formatted header row based on what was submitted with
-C<set_header>.  Will cause an error if format_header was not called.
+C<set_header>.  Will cause an error if C<set_header> was not called.
 
 =item C<format_headers>
 
@@ -686,16 +717,21 @@ on the fly.
 
 =item C<print>
 
-Print directly to fh.  If fh is not supplied but filename is, first sets
-fh to the result of opening filename.  Otherwise it defaults fh to STDOUT.
+Prints the arguments directly to fh.  If fh is not supplied but filename
+is, first sets fh to the result of opening filename.  Otherwise it
+defaults fh to STDOUT.  You probably don't want to use this directly.
+Instead use one of the other print methods.
 
 =item C<print_row>
 
-Does a C<print> of C<format_row>.
+Does a C<print> of C<format_row>.  Convenient when you wish to maintain
+your knowledge of the field order.
 
 =item C<print_header>
 
-Does a C<print> of C<format_header>.
+Does a C<print> of C<format_header>.  Makes sense when you will be
+using print_data for your actual data because the field order is
+guaranteed to match up.
 
 =item C<print_headers>
 
@@ -703,7 +739,8 @@ An alias to C<print_header>.
 
 =item C<print_data>
 
-Does a C<print> of C<format_data>.
+Does a C<print> of C<format_data>.  Relieves you from having to
+synchronize field order in your code.
 
 =back
 

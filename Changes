@@ -52,3 +52,13 @@ Revision history for Perl extension Text::xSV.
         - Forgot date on version 0.09.
         - Empty string when saved and read would come back as undef.
           Fixed.
+
+0.11 Tue Mar 16 08:00:00 PST 2004
+        - Fix set_sep redefinition bug caught by warnings.
+        - Remove = in a conditional warnings.
+        - Add -w to test.pl so that I won't miss future warnings. :-)
+        - Add set_warning_handler.  Documented it.
+        - Documentation fixes.
+        - Added set_close_fh.  Documented it.  (May remove.)
+        - Added read_header and read_headers.  Removed bind_headers.
+          Documented bind_header as deprecated.

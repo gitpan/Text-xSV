@@ -1,3 +1,4 @@
+#! /usr/bin/perl -w
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl test.pl'
 
@@ -117,7 +118,7 @@ my $error;
 $csv->set_error_handler( sub {$error = shift} );
 ok();
 
-my %hash = $csv->fetchrow_hash();
+%hash = $csv->fetchrow_hash();
 ok();
 
 (("hello" eq $hash{one} and "world" eq $hash{two}))
