@@ -22,3 +22,9 @@ Revision history for Perl extension Text::xSV.
         - Add alias, delete, get_fields.
         - Add support for arbitrary computed fields with
           add_compute.
+0.07  Mon Nov  3 8:30:00 PST 2003
+        - Hopefully fix caching test that was broken on Win32
+          (I strongly suspect due to different behaviour of
+          "local").  The fix also avoids a theroetical bug
+          that I had not thought through with multiple xSV
+          objects whose computes call each other.

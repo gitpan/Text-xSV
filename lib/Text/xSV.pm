@@ -1,8 +1,7 @@
 package Text::xSV;
-$VERSION = 0.06;
+$VERSION = 0.07;
 use strict;
 use Carp;
-use vars qw(%in_compute);
 
 sub alias {
   my ($self, $from, $to) = @_;
@@ -56,6 +55,7 @@ sub delete {
 sub extract {
   my $self = shift;
   my $cached_results = $self->{cached} ||= {};
+  my $in_compute = $self->{in_compute} ||= {};
   my $row = $self->{row} or confess("No row found (did you call get_row())?");
   my $lookup = $self->{field_pos}
     or confess("Can't find field info (did you bind_fields or bind_header?)");
@@ -69,12 +69,12 @@ sub extract {
       elsif (exists $cached_results->{$field}) {
         push @data, $cached_results->{$field};
       }
-      elsif (exists $in_compute{$field}) {
+      elsif ($in_compute->{$field}) {
         confess("Infinite recursion detected in computing '$field'");
       }
       else {
         # Have to do compute
-        local $in_compute{$field} = 1;
+        $in_compute->{$field} = 1;
         $cached_results->{$field} = $position_or_compute->($self);
         push @data, $cached_results->{$field};
       }
@@ -107,6 +107,7 @@ sub get_fields {
     $self = shift;
     delete $self->{row};
     delete $self->{cached};
+    delete $self->{in_compute};
     $fh = $self->{fh};
     defined($line = <$fh>) or return;
     if (exists $self->{filter}) {
