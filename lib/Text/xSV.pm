@@ -1,5 +1,5 @@
 package Text::xSV;
-$VERSION = 0.08;
+$VERSION = 0.09;
 use strict;
 use Carp;
 
@@ -38,8 +38,9 @@ sub bind_fields {
 sub bind_header {
   my $self = shift;
   $self->bind_fields($self->get_row());
-  delete $self->{row};
 }
+
+*bind_headers = \&bind_header;
 
 sub delete {
   my $self = shift;
@@ -55,6 +56,11 @@ sub delete {
         "Cannot delete field '$field': it doesn't exist");
     }
   }
+}
+
+sub error_handler {
+  my $self = shift;
+  $self->{error_handler}->(@_);
 }
 
 sub extract {
@@ -112,6 +118,83 @@ sub fetchrow_hash {
   $self->extract_hash();
 }
 
+sub format_data {
+  my $self = shift;
+  my %data = @_;
+  my @row;
+  my $field_pos = $self->{field_pos} or $self->error_handler(
+    "Can't find field info (did you bind_fields or bind_header?)"
+  );
+  while (my ($field, $value) = each %data) {
+    my $pos = $field_pos->{$field};
+    if (defined($pos)) {
+      $row[$pos] = $value;
+    }
+    else {
+      eval {
+        $self->error_handler("Ignoring unknown field '$field'");
+      };
+      warn $@ if $@;
+    }
+  }
+  $self->{row} = \@row;
+  my $header = $self->{header}
+    or $self->error_handler("Cannot format_data when no header is set");
+  $self->format_row( $self->extract( @$header ));
+}
+
+sub format_header {
+  my $self = shift;
+  if ($self->{header}) {
+    return $self->format_row(@{$self->{header}});
+  }
+  else {
+    $self->{error_handler}->("Cannot format_header when no header is set");
+  }
+}
+
+*format_headers = \&format_header;
+
+sub format_row {
+  my $self = shift;
+
+  $self->{row_num}++;
+
+  if ($self->{row_size_warning}) {
+    if (not exists $self->{row_size}) {
+      $self->{row_size} = @_;
+    }
+    elsif ( @_ != $self->{row_size}) {
+      my $count = @_;
+      eval {
+        $self->error_handler(
+          "Formatting $count fields at row $self->{row_num}, "
+          . "expected $self->{row_size}"
+        ); 
+      };
+      warn $@ if $@;
+    }
+  }
+
+  my $sep = $self->{sep};
+  my @row;
+  foreach my $value (@_) {
+    if (not defined($value)) {
+      push @row, "";
+    }
+    elsif ($value =~ /\s|\Q$sep\E|"/) {
+      local $_ = $value;
+      s/"/""/g;
+      push @row, qq("$_");
+    }
+    else {
+      push @row, $value;
+    }
+  }
+  my $row = join $sep, @row;
+  return $row . "\n";
+}
+
 sub get_fields {
   my $self = shift;
   my $field_pos = $self->{field_pos}
@@ -132,7 +215,12 @@ sub get_fields {
     delete $self->{row};
     delete $self->{cached};
     delete $self->{in_compute};
-    $fh = $self->{fh};
+    $fh = ($self->{fh}
+      ||= $self->{filename}
+        ? $self->open_file($self->{filename}, "<")
+        : ($self->{filename} = "STDIN" and \*STDIN)
+        # Sorry for the above convoluted way to sneak in defining filename.
+    );
     defined($line = <$fh>) or return;
     if ($self->{filter}) {
       $line = $self->{filter}->($line);
@@ -145,6 +233,9 @@ sub get_fields {
     if (not exists $self->{row_size}) {
       $self->{row_size} = @row;
     }
+    elsif (not $self->{row_size_warning}) {
+      # The user asked not to get this warning, so don't issue it.
+    }
     elsif ($self->{row_size} != @row) {
       my $new = @row;
       my $where = "Line $., file $self->{filename}";
@@ -153,7 +244,6 @@ sub get_fields {
           "$where had $new fields, expected $self->{row_size}" ); 
       };
       warn($@) if $@;
-      $self->{row_size} = $new;
     }
     $self->{row} = \@row;
     return wantarray ? @row : [@row];
@@ -228,12 +318,25 @@ sub get_fields {
   }
 }
 
+my @normal_accessors = qw(
+  error_handler filename filter fh row_size row_size_warning sep
+);
+foreach my $accessor (@normal_accessors) {
+  no strict 'refs';
+  *{"set_$accessor"} = sub {
+    $_[0]->{$accessor} = $_[1];
+  };
+}
+
 sub new {
-  my $self = bless ({'sep' => ","}, shift);
-  my %allowed = map {($_, 1)} qw(error_handler filename fh filter sep);
+  my $self = bless ({}, shift);
+  my %allowed = map { $_=>1 } @normal_accessors, qw(header headers row sep);
+
   my %args = (
     error_handler => \&confess,
     filter => sub {my $line = shift; $line =~ s/\r$//; $line;},
+    sep => ",",
+    row_size_warning => 1,
     @_
   );
   foreach my $arg (keys %args) {
@@ -241,39 +344,73 @@ sub new {
       my @allowed = sort keys %allowed;
       croak("Invalid argument '$arg', allowed args: (@allowed)");
     }
-    $self->{$arg} = $args{$arg};
+    my $method = "set_$arg";
+    $self->$method($args{$arg});
   }
-  if (exists $self->{filename} and not exists $self->{fh}) {
-    $self->open_file($self->{filename});
-  }
-  $self->set_sep($self->{sep});
   return $self;
 }
 
+# Note the undocumented third argument for the mode.  Most of the time this
+# will do what is wanted without requiring Perl 5.6 or better.  Users who
+# supply their own metacharacters will also not be surprised at the result.
 sub open_file {
   my $self = shift;
-  my $file = $self->{filename} = shift;
+  my $file = $self->{filename} = shift || return $self->{error_handler}->(
+    "No filename specified at open_file"
+  );
+  if ($file !~ /\||<|>/ and @_) {
+    my $mode = shift;
+    $file = "$mode $file";
+  }
   my $fh = do {local *FH}; # Old trick, not needed in 5.6
-  open ($fh, "< $file") or return $self->{error_handler}->(
-    "Cannot read '$file': $!");
+  open ($fh, $file) or return $self->{error_handler}->(
+    "Cannot open '$file': $!");
   $self->{fh} = $fh;
 }
 
-sub set_error_handler {
-  $_[0]->{error_handler} = $_[1];
+sub print {
+  my $self = shift;
+  $self->{row_out}++;
+  my $fh = ($self->{fh}
+      ||= $self->{filename}
+        ? $self->open_file($self->{filename}, ">")
+        : ($self->{filename} = "STDOUT" and \*STDOUT)
+        # Sorry for the above convoluted way to sneak in defining filename.
+      );
+  print $fh @_ or $self->error_handler( "Print #$self->{row_out}: $!" );
 }
 
-sub set_fh {
-  $_[0]->{fh} = $_[1];
+sub print_data {
+  my $self = shift;
+  $self->print($self->format_data(@_));
 }
 
-sub set_filename {
-  $_[0]->{filename} = $_[1];
+sub print_header {
+  my $self = shift;
+  $self->print($self->format_header(@_));
 }
 
-sub set_filter {
-  $_[0]->{filter} = $_[1];
+*print_headers = \&print_header;
+
+sub print_row {
+  my $self = shift;
+  $self->print($self->format_row(@_));
 }
+
+sub set_header {
+  my $self = shift;
+  if (1 == @_ and UNIVERSAL::isa($_[0], 'ARRAY')) {
+    $self->{header} = $_[0];
+  }
+  else {
+    $self->{header} = \@_;
+  }
+  if (not exists $self->{field_pos}) {
+    $self->bind_fields(@{$self->{header}});
+  }
+}
+
+*set_headers = \&set_header;
 
 sub set_sep {
   my $self = shift;
@@ -283,6 +420,16 @@ sub set_sep {
   }
   else {
     $self->{error_handler}->("The separator '$sep' is not of length 1");
+  }
+}
+
+sub DESTROY {
+  my $self = shift;
+  if ($self->{fh}) {
+    close($self->{fh}) or $self->{error_handler}->(
+      $! ? "Cannot close '$self->{filename}': $!"
+         : "Exit status $? closing '$self->{filename}'"
+    );
   }
 }
 
@@ -320,12 +467,26 @@ Text::xSV - read character separated files
     #   print $csv->extract("message");
   }
 
+  # The file above could have been created with:
+  my $csv = Text::xSV->new(
+    filename => "> foo.csv",
+    header   => ["name", "age", "sex"],
+  );
+  $csv->print_header();
+  $csv->print_row("Ben Tilly", 34, "M");
+  # Same thing.
+  $csv->print_data(
+    age  => 34,
+    name => "Ben Tilly",
+    sex  => "M",
+  );
+
 =head1 DESCRIPTION
 
-This module is for reading character separated data.  The most common
-example is comma-separated.  However that is far from the only
-possibility, the same basic format is exported by Microsoft products
-using tabs, colons, or other characters.
+This module is for reading and writing a common variation of character
+separated data.  The most common example is comma-separated.  However
+that is far from the only possibility, the same basic format is
+exported by Microsoft products using tabs, colons, or other characters.
 
 The format is a series of rows separated by returns.  Within each row
 you have a series of fields separated by your character separator.
@@ -342,8 +503,12 @@ string, quote it.
 
 People usually naively solve this with split.  A next step up is to
 read a line and parse it.  Unfortunately this choice of interface
-(which is made by Text::CSV on CPAN) makes it impossible to handle
-returns embedded in a field.  Therefore you may need access to the
+(which is made by Text::CSV on CPAN) makes it difficult to handle
+returns embedded in a field.  (Earlier versions of this document
+claimed impossible.  That is false.  But the calling code has to
+supply the logic to add lines until you have a valid row.  To the
+extent that you don't do this consistently, your code will be buggy.)
+Therefore you it is good for the parsing logic to have access to the
 whole file.
 
 This module solves the problem by creating a CSV object with access to
@@ -361,12 +526,50 @@ well.  Here are the available methods
 =item C<new>
 
 This is the constructor.  It takes a hash of optional arguments.
-They are the I<filename> of the CSV file you are reading, the
-I<fh> through which you read, an optional I<filter>, the
-I<error_handler> that is called for errors, and the one character
-I<sep> that you are using.  If the filename is passed and the fh
-is not, then it will open a filehandle on that file and sets the
-fh accordingly.  The separator defaults to a comma.
+They correspond to the following set_* methods without the set_ prefix.
+For instance if you pass filename=>... in, then set_filename will be
+called.
+
+=over 8
+
+=item C<set_sep>
+
+Sets the one character separator that divides fields.  Defaults to a
+comma.
+
+=item C<set_filename>
+
+The filename of the xSV file that you are reading.  Used heavily in
+error reporting.  If fh is not set and filename is, then fh will be
+set to the result of calling open on filename.
+
+=item C<set_fh>
+
+Sets the fh that this Text::xSV object will read from or write to.  If it
+is not set, it will be set to the result of opening filename if that
+is set, otherwise it will default to STDIN or STDOUT, depending on
+whether you first try to read or write.
+
+=item C<set_header>
+
+Sets the internal header array of fields that is referred to in
+arranging data on the *_data output methods.  If C<bind_fields> has
+not been called, also calls that on the assumption that the fields
+that you want to output matches the fields that you will provide.
+
+=item C<set_headers>
+
+An alias to C<set_header>.
+
+=item C<set_error_handler>
+
+The error handler is an anonymous function which is expected to
+take an error message and do something useful with it.  The
+default error handler is Carp::confess.  Error handlers that do
+not trip exceptions (eg with die) are less tested and may not work
+perfectly in all circumstances.
+
+=item C<set_filter>
 
 The filter is an anonymous function which is expected to
 accept a line of input, and return a filtered line of output.  The
@@ -374,23 +577,21 @@ default filter removes \r so that Windows files can be read under
 Unix.  This could also be used to, eg, strip out Microsoft smart
 quotes.
 
-The error handler is an anonymous function which is expected to
-take an error message and do something useful with it.  The
-default error handler just calls Carp::confess.  Error handlers
-that do not trip exceptions (eg with die) are less tested and may
-not work perfectly in all circumstances.
+=item C<set_row_size>
 
-=item C<set_error_handler>
+The number of elements that you expect to see in each row.  It
+defaults to the size of the first row read or set.  If
+row_size_warning is true and the size of the row read or formatted
+does not match, then a warning is issued.
 
-=item C<set_filename>
+=item C<set_row_size_warning>
 
-=item C<set_fh>
+Determines whether or not to issue warnings when the row read or set
+has a number of fields different than the expected number.  Defaults
+to true.  Whether or not this is on, missing fields are always read
+as undef, and extra fields are ignored.
 
-=item C<set_filter>
-
-=item C<set_sep>
-
-Set methods corresponding to the optional arguments to C<new>.
+=back
 
 =item C<open_file>
 
@@ -407,6 +608,11 @@ Reads a row from the file as a header line and memorizes the positions
 of the fields for later use.  File formats that carry field information
 tend to be far more robust than ones which do not, so this is the
 preferred function.
+
+=item C<bind_headers>
+
+An alias for C<bind_header>.  (If I'm going to keep on typing the plural,
+I'll just make it work...)
 
 =item C<get_row>
 
@@ -426,7 +632,7 @@ returns the hash.  In scalar context returns a reference to the hash.
 
 =item C<fetchrow_hash>
 
-Combines get_row and extract_hash to fetch the next row and return a
+Combines C<get_row> and C<extract_hash> to fetch the next row and return a
 hash or hashref depending on context.
 
 =item C<alias>
@@ -449,20 +655,59 @@ argument.
 Text::xSV caches results in case computes call other computes.  It
 will also catch infinite recursion with a hopefully useful message.
 
+=item C<format_row>
+
+Takes a list of fields, and returns them quoted as necessary, joined with
+sep, with a newline at the end.
+
+=item C<format_header>
+
+Returns the formatted header row based on what was submitted with
+C<set_header>.  Will cause an error if format_header was not called.
+
+=item C<format_headers>
+
+Continuing the meme, an alias for format_header.
+
+=item C<format_data>
+
+Takes a hash of data.  Sets internal data, and then formats
+the result of C<extract>ing out the fields corresponding to the
+headers.  Note that if you called C<bind_fields> and then defined
+some more fields with C<add_compute>, computes would be done for you
+on the fly.
+
+=item C<print>
+
+Print directly to fh.  If fh is not supplied but filename is, first sets
+fh to the result of opening filename.  Otherwise it defaults fh to STDOUT.
+
+=item C<print_row>
+
+Does a C<print> of C<format_row>.
+
+=item C<print_header>
+
+Does a C<print> of C<format_header>.
+
+=item C<print_headers>
+
+An alias to C<print_header>.
+
+=item C<print_data>
+
+Does a C<print> of C<format_data>.
+
 =back
 
 =head1 TODO
-
-Allow blank fields at the end to be optionally undef?  (Requested by
-Chad Simmons.)
-
-Think through a writing interface.  (Suggested by dragonchild on
-perlmonks.)
 
 Add utility interfaces.  (Suggested by Ken Clark.)
 
 Offer an option for working around the broken tab-delimited output
 that some versions of Excel present for cut-and-paste.
+
+Add tests for the output half of the module.
 
 =head1 BUGS
 
@@ -489,6 +734,10 @@ My thanks to people who have given me feedback on how they would like
 to use this module, and particularly to Klaus Weidner for his patch
 fixing a nasty segmentation fault from a stack overflow in the regular
 expression engine on large fields.
+
+Rob Kinyon (dragonchild) motivated me to do the writing interface, and
+gave me useful feedback on what it should look like.  I'm not sure that
+he likes the result, but it is how I understood what he said...
 
 =head1 AUTHOR AND COPYRIGHT
 

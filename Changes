@@ -34,3 +34,16 @@ Revision history for Perl extension Text::xSV.
         - Allow people to set arbitrary error handling routines.
         - Added extract_hash and fetchrow_hash utility
           functions.  I may add more of these later.
+0.09
+        - Fixed bug where row_size would reset on error.
+          (Reported by Rob Kinyon.)
+        - Fixed false claim about Text::CSV.
+        - Made bind_headers an alias for bind_header.
+	- Made open_file not just be for reads.  Documented it.
+	- Added set_row_size.  Documented it.
+	- Gave reasonable defaults if both fh and filename are
+	  missing.  Documented it.
+	- Made row_size warning optional with set_row_size_warning.
+	  per request from Chad Simmons.  Documented it.
+	- Added format_* functions.  Documented them.
+	- Added print_* functions.  Documented them.
