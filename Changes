@@ -1,0 +1,12 @@
+Revision history for Perl extension Text::xSV.
+
+0.01  Sat Mar 17 00:50:11 2001
+	- original version; posted to PerlMonks
+0.02  Sat Mar 17 14:00:00 2001
+        - Fixed bug in presentation of double-quotes
+0.03  Sun Apr 08 14:00:00 2001
+        - Made warnings safe
+0.04  Mon Apr 16 23:10:00 EDT 2001
+        - Add filter
+        - Slightly improved warnings
+        - Put on CPAN
