@@ -1,5 +1,5 @@
 package Text::xSV;
-$VERSION = 0.11;
+$VERSION = 0.12;
 use strict;
 use Carp;
 
@@ -348,7 +348,9 @@ sub new {
     close_fh => 0,
     @_
   );
-  foreach my $arg (keys %args) {
+  # Note, must set error_handler and warning_handler first because they
+  # might get called while processing the other args.
+  foreach my $arg ('error_handler', 'warning_handler', keys %args) {
     unless (exists $allowed{$arg}) {
       my @allowed = sort keys %allowed;
       croak("Invalid argument '$arg', allowed args: (@allowed)");
@@ -785,8 +787,8 @@ he likes the result, but it is how I understood what he said...
 
 =head1 AUTHOR AND COPYRIGHT
 
-Ben Tilly (ben_tilly@operamail.com).  Originally posted at
+Ben Tilly (btilly@gmail.com).  Originally posted at
 http://www.perlmonks.org/node_id=65094.
 
-Copyright 2001-2003.  This may be modified and distributed on the same
+Copyright 2001-2004.  This may be modified and distributed on the same
 terms as Perl.

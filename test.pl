@@ -7,7 +7,7 @@
 # Change 1..1 below to 1..last_test_to_print .
 # (It may become useful if the test is moved to ./t subdirectory.)
 
-BEGIN { $| = 1; print "1..36\n"; }
+BEGIN { $| = 1; print "1..37\n"; }
 END {print "not ok 1\n" unless $loaded;}
 use Text::xSV;
 $loaded = 1;
@@ -131,6 +131,16 @@ $hash{"full message"} eq "hello world"
 
 # end of file
 $csv->get_row() ? not_ok() : ok();
+
+# Test that invalid separators are caught.
+my $problem_caught = 0;
+$csv = Text::xSV->new(
+  error_handler => sub {
+    $problem_caught++ if $_[0] =~ /not of length 1/;
+  },
+  sep => "too long",
+);
+$problem_caught ? ok() : not_ok();
 
 sub not_ok {
   print "not ";

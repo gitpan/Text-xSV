@@ -62,3 +62,8 @@ Revision history for Perl extension Text::xSV.
         - Added set_close_fh.  Documented it.  (May remove.)
         - Added read_header and read_headers.  Removed bind_headers.
           Documented bind_header as deprecated.
+
+0.12 Tue Sep 28 08:14:03 PDT 2004
+        - Make sure that error_handler is set up before it might be called.
+        - Update my email address.
+        - Update the date on the copyright notice.
