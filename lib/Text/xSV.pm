@@ -1,5 +1,5 @@
 package Text::xSV;
-$VERSION = 0.12;
+$VERSION = 0.13;
 use strict;
 use Carp;
 
@@ -220,7 +220,7 @@ sub get_fields {
     $fh = ($self->{fh}
       ||= $self->{filename}
         ? $self->open_file($self->{filename}, "<")
-        : ($self->{filename} = "STDIN", \*STDIN)
+        : ($self->{filename} = "ARGV", \*ARGV)
         # Sorry for the above convoluted way to sneak in defining filename.
     );
     return unless $fh;
@@ -568,8 +568,9 @@ set to the result of calling open on filename.
 
 Sets the fh that this Text::xSV object will read from or write to.  If it
 is not set, it will be set to the result of opening filename if that
-is set, otherwise it will default to STDIN or STDOUT, depending on
-whether you first try to read or write.
+is set, otherwise it will default to ARGV (ie acts like <>) or STDOUT,
+depending on whether you first try to read or write.  The old default
+used to be STDIN.
 
 =item C<set_header>
 
@@ -784,6 +785,10 @@ expression engine on large fields.
 Rob Kinyon (dragonchild) motivated me to do the writing interface, and
 gave me useful feedback on what it should look like.  I'm not sure that
 he likes the result, but it is how I understood what he said...
+
+Jess Robinson (castaway) convinced me that ARGV was a better default
+input handle than STDIN.  I hope that switching that default doesn't
+inconvenience anyone.
 
 =head1 AUTHOR AND COPYRIGHT
 

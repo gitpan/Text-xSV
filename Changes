@@ -67,3 +67,10 @@ Revision history for Perl extension Text::xSV.
         - Make sure that error_handler is set up before it might be called.
         - Update my email address.
         - Update the date on the copyright notice.
+
+0.013 Tue Sep 28 08:35:57 PDT 2004
+        - Make the fallback fh be ARGV instead of STDIN.  This is NOT
+          backwards compatible.  However it is a significantly more
+          useful default.  If I accidentally broke your script, I
+          apologize.  Tell me if I ever meet you and I'll owe you a
+          beer or equivalent.
