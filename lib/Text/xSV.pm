@@ -1,5 +1,5 @@
 package Text::xSV;
-$VERSION = 0.09;
+$VERSION = 0.10;
 use strict;
 use Carp;
 
@@ -180,14 +180,21 @@ sub format_row {
   my @row;
   foreach my $value (@_) {
     if (not defined($value)) {
+      # Empty fields are undef
       push @row, "";
     }
+    elsif ("" eq $value) {
+      # The empty string has to be quoted.
+      push @row, qq("");
+    }
     elsif ($value =~ /\s|\Q$sep\E|"/) {
+      # quote it
       local $_ = $value;
       s/"/""/g;
       push @row, qq("$_");
     }
     else {
+      # Unquoted is fine
       push @row, $value;
     }
   }

@@ -34,7 +34,7 @@ Revision history for Perl extension Text::xSV.
         - Allow people to set arbitrary error handling routines.
         - Added extract_hash and fetchrow_hash utility
           functions.  I may add more of these later.
-0.09
+0.09 Mon Mar 15 02:00:00 PST 2004
         - Fixed bug where row_size would reset on error.
           (Reported by Rob Kinyon.)
         - Fixed false claim about Text::CSV.
@@ -47,3 +47,8 @@ Revision history for Perl extension Text::xSV.
 	  per request from Chad Simmons.  Documented it.
 	- Added format_* functions.  Documented them.
 	- Added print_* functions.  Documented them.
+
+0.10 Mon Mar 15 09:00:00 PST 2004
+        - Forgot date on version 0.09.
+        - Empty string when saved and read would come back as undef.
+          Fixed.
