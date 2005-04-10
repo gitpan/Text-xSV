@@ -2,10 +2,12 @@
 
 BEGIN {
   $^W = 1;  # Use warnings
-  my $start_dir = '/home/tilly/my_code/Text-xSV';
+  my $start_dir = '/mnt/hdc10/tilly/my_code/Text-xSV';
   chdir($start_dir) or die "Cannot chdir to $start_dir: $!";
   @INC = 
     (
+     '/mnt/hdc6/local/share/perl/5.8.0',
+     '/mnt/hdc6/share/perl5',
      '/etc/perl',
      '/usr/local/lib/perl/5.8.4',
      '/usr/local/share/perl/5.8.4',
@@ -14,13 +16,7 @@ BEGIN {
      '/usr/lib/perl/5.8',
      '/usr/share/perl/5.8',
      '/usr/local/lib/site_perl',
-     '/usr/local/lib/perl/5.8.3',
-     '/usr/local/share/perl/5.8.3',
-     '/usr/local/lib/perl/5.8.2',
-     '/usr/local/share/perl/5.8.2',
-     '/usr/local/lib/perl/5.8.0',
-     '/usr/local/share/perl/5.8.0',
-     '/home/tilly/my_code/Text-xSV'
+     '/mnt/hdc10/tilly/my_code/Text-xSV'
     );
 }
 
@@ -29,7 +25,7 @@ use Module::Build;
 # This should have just enough arguments to be able to bootstrap the rest.
 my $build = resume Module::Build (
   properties => {
-    config_dir => '/home/tilly/my_code/Text-xSV/_build',
+    config_dir => '/mnt/hdc10/tilly/my_code/Text-xSV/_build',
   },
 );
 

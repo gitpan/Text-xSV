@@ -1,5 +1,5 @@
 package Text::xSV;
-$VERSION = 0.13;
+$VERSION = 0.14;
 use strict;
 use Carp;
 
@@ -431,6 +431,9 @@ sub set_header {
 sub set_sep {
   my $self = shift;
   my $sep = shift;
+  # The reason for this limitation is so that $start_field in _get_row
+  # will do what it is supposed to.  (I should use a negative lookahead,
+  # but I'm documenting this late at night and want some sleep.)
   if (1 == length($sep)) {
     $self->{sep} = $sep;
   }

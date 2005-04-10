@@ -7,7 +7,7 @@
 # Change 1..1 below to 1..last_test_to_print .
 # (It may become useful if the test is moved to ./t subdirectory.)
 
-BEGIN { $| = 1; print "1..37\n"; }
+BEGIN { $| = 1; print "1..39\n"; }
 END {print "not ok 1\n" unless $loaded;}
 use Text::xSV;
 $loaded = 1;
@@ -129,18 +129,19 @@ $hash{"full message"} eq "hello world"
 
 ($error =~ /Infinite recursion/) ? ok() : not_ok();
 
+$csv->set_sep(":");
+ok();
+
+test_row("hello,world","other:stuff");
+
+# Test whether I can set a multi-character seperator.
+$csv->set_sep("::");
+$error =~ /not of length 1/ ? ok() : not_ok();
+
 # end of file
 $csv->get_row() ? not_ok() : ok();
 
-# Test that invalid separators are caught.
-my $problem_caught = 0;
-$csv = Text::xSV->new(
-  error_handler => sub {
-    $problem_caught++ if $_[0] =~ /not of length 1/;
-  },
-  sep => "too long",
-);
-$problem_caught ? ok() : not_ok();
+exit;
 
 sub not_ok {
   print "not ";
@@ -157,6 +158,7 @@ sub test_arrays_match {
   my ($ary_1, $ary_2) = @_;
   if (@$ary_1 != @$ary_2) {
     not_ok();
+    print STDERR "\nArrays have different length\n";
     return;
   }
   foreach (0..$#$ary_1) {
@@ -168,6 +170,7 @@ sub test_arrays_match {
         $ary_1->[$_] ne $ary_2->[$_]
       )
     ) {
+      print STDERR "\nElement $_ differs in arrays ($ary_1->[$_] vs $ary_2->[$_]).\n";
       not_ok();
       return;
     }
