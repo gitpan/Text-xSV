@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name: Text-xSV
-version: 0.14
+version: 0.15
 license: perl
 distribution_type: module
 requires: {}
@@ -10,5 +10,5 @@ conflicts: {}
 provides:
   Text::xSV:
     file: lib/Text/xSV.pm
-    version: 0.14
+    version: 0.15
 generated_by: Module::Build version 0.20

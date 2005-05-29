@@ -1,5 +1,5 @@
 package Text::xSV;
-$VERSION = 0.14;
+$VERSION = 0.15;
 use strict;
 use Carp;
 
@@ -107,7 +107,7 @@ sub extract {
 
 sub extract_hash {
   my $self = shift;
-  my @fields = $self->get_fields();
+  my @fields = @_ ? @_ : $self->get_fields();
   my %hash;
   @hash{@fields} = $self->extract(@fields);
   wantarray ? %hash : \%hash;
@@ -115,8 +115,8 @@ sub extract_hash {
 
 sub fetchrow_hash {
   my $self = shift;
-  $self->get_row();
-  $self->extract_hash();
+  return unless $self->get_row();
+  $self->extract_hash(@_);
 }
 
 sub format_data {
@@ -582,6 +582,9 @@ arranging data on the *_data output methods.  If C<bind_fields> has
 not been called, also calls that on the assumption that the fields
 that you want to output matches the fields that you will provide.
 
+The return from this function is inconsistent and should not be
+relied on to be anything useful.
+
 =item C<set_headers>
 
 An alias to C<set_header>.
@@ -671,8 +674,10 @@ returns the list, in scalar context returns an anonymous array.
 
 =item C<extract_hash>
 
-Extracts all fields that it knows about into a hash.  In list context
-returns the hash.  In scalar context returns a reference to the hash.
+Extracts fields into a hash.  If a list of fields is passed, that is
+the list of fields that go into the hash.  If no list, it extracts all
+fields that it knows about.  In list context returns the hash.  In
+scalar context returns a reference to the hash.
 
 =item C<fetchrow_hash>
 
@@ -792,6 +797,13 @@ he likes the result, but it is how I understood what he said...
 Jess Robinson (castaway) convinced me that ARGV was a better default
 input handle than STDIN.  I hope that switching that default doesn't
 inconvenience anyone.
+
+Gyepi SAM noticed that fetchrow_hash complained about missing data at
+the end of the loop and sent a patch.  Applied.
+
+shotgunefx noticed that bind_header changed its return between versions.
+It is actually worse than that, it changes its return if you call it
+twice.  Documented that its return should not be relied upon.
 
 =head1 AUTHOR AND COPYRIGHT
 

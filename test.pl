@@ -7,7 +7,7 @@
 # Change 1..1 below to 1..last_test_to_print .
 # (It may become useful if the test is moved to ./t subdirectory.)
 
-BEGIN { $| = 1; print "1..39\n"; }
+BEGIN { $| = 1; print "1..42\n"; }
 END {print "not ok 1\n" unless $loaded;}
 use Text::xSV;
 $loaded = 1;
@@ -48,6 +48,12 @@ my $hash_ref = $csv->extract_hash();
 ok();
 
 (("hello" eq $hash_ref->{one} and "world" eq $hash_ref->{two}))
+  ? ok() : not_ok();
+
+%hash = $csv->extract_hash('one');
+ok();
+
+(("hello" eq $hash{one} and not defined($hash{two})))
   ? ok() : not_ok();
 
 
@@ -140,6 +146,8 @@ $error =~ /not of length 1/ ? ok() : not_ok();
 
 # end of file
 $csv->get_row() ? not_ok() : ok();
+
+$csv->fetchrow_hash() ? not_ok() : ok();
 
 exit;
 

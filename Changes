@@ -80,3 +80,11 @@ Revision history for Perl extension Text::xSV.
 	- Document internally why the "single character seperator" limit
 	  exists.
 	- Add a couple of tests.
+
+0.15 Sun May 29 13:00 PDT 2005
+        - Apply patch from Gyepi SAM to prevent warning on fetchrow_hash
+	  at end of file.
+	- Point out that bind_headers does not have a consistent return.
+	  This is not a bug.
+	- Allow fetchrow_hash and extract_hash to take a list of arguments
+	  of the fields that you want extracted.

@@ -7,7 +7,6 @@ BEGIN {
   @INC = 
     (
      '/mnt/hdc6/local/share/perl/5.8.0',
-     '/mnt/hdc6/share/perl5',
      '/etc/perl',
      '/usr/local/lib/perl/5.8.4',
      '/usr/local/share/perl/5.8.4',
