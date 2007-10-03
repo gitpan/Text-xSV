@@ -7,7 +7,7 @@
 # Change 1..1 below to 1..last_test_to_print .
 # (It may become useful if the test is moved to ./t subdirectory.)
 
-BEGIN { $| = 1; print "1..42\n"; }
+BEGIN { $| = 1; print "1..44\n"; }
 END {print "not ok 1\n" unless $loaded;}
 use Text::xSV;
 $loaded = 1;
@@ -148,6 +148,20 @@ $error =~ /not of length 1/ ? ok() : not_ok();
 $csv->get_row() ? not_ok() : ok();
 
 $csv->fetchrow_hash() ? not_ok() : ok();
+
+my $temp_file = "temp.csv";
+
+$csv = Text::xSV->new(filename => $temp_file);
+
+$csv->print_row(qw(a b c));
+$csv->print_row(qw(x y z));
+
+$csv = undef; # Should delete the object.
+
+$csv = Text::xSV->new(filename => $temp_file);
+
+test_arrays_match([qw(a b c)], scalar $csv->get_row());
+test_arrays_match([qw(x y z)], scalar $csv->get_row());
 
 exit;
 

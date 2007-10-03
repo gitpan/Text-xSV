@@ -1,5 +1,5 @@
 package Text::xSV;
-$VERSION = 0.15;
+$VERSION = 0.16;
 use strict;
 use Carp;
 
@@ -337,6 +337,7 @@ sub new {
   my %args = (
     error_handler => \&confess,
     warning_handler => sub {
+      my $self = shift;
       eval {
         $self->error_handler(@_);
       };
@@ -804,6 +805,10 @@ the end of the loop and sent a patch.  Applied.
 shotgunefx noticed that bind_header changed its return between versions.
 It is actually worse than that, it changes its return if you call it
 twice.  Documented that its return should not be relied upon.
+
+Fred Steinberg found that writes did not happen promptly upon closing
+the object.  This turned out to be a self-reference causing a DESTROY
+bug.  I fixed it.
 
 =head1 AUTHOR AND COPYRIGHT
 

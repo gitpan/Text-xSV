@@ -88,3 +88,6 @@ Revision history for Perl extension Text::xSV.
 	  This is not a bug.
 	- Allow fetchrow_hash and extract_hash to take a list of arguments
 	  of the fields that you want extracted.
+
+0.16 Tue Oct  2 17:33 PDT 2007
+	- Fix DESTROY bug reported by Fred Steinberg.
