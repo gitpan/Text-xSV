@@ -1,5 +1,5 @@
 package Text::xSV;
-$VERSION = 0.16;
+$VERSION = 0.17;
 use strict;
 use Carp;
 
@@ -337,7 +337,6 @@ sub new {
   my %args = (
     error_handler => \&confess,
     warning_handler => sub {
-      my $self = shift;
       eval {
         $self->error_handler(@_);
       };
@@ -810,10 +809,14 @@ Fred Steinberg found that writes did not happen promptly upon closing
 the object.  This turned out to be a self-reference causing a DESTROY
 bug.  I fixed it.
 
+Carey Drake and Steve Caldwell noticed that the default
+warning_handler expected different arguments than it got.  Both
+suggested the same fix that I implemented.
+
 =head1 AUTHOR AND COPYRIGHT
 
 Ben Tilly (btilly@gmail.com).  Originally posted at
 http://www.perlmonks.org/node_id=65094.
 
-Copyright 2001-2004.  This may be modified and distributed on the same
+Copyright 2001-2009.  This may be modified and distributed on the same
 terms as Perl.

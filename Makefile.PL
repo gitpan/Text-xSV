@@ -2,11 +2,11 @@
 use ExtUtils::MakeMaker;
 WriteMakefile
 (
-          'INSTALLDIRS' => 'site',
-          'PREREQ_PM' => {},
           'NAME' => 'Text::xSV',
+          'VERSION_FROM' => 'lib/Text/xSV.pm',
+          'PREREQ_PM' => {},
+          'INSTALLDIRS' => 'site',
           'EXE_FILES' => [],
-          'PL_FILES' => {},
-          'VERSION_FROM' => 'lib/Text/xSV.pm'
+          'PL_FILES' => {}
         )
 ;
