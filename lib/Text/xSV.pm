@@ -1,5 +1,5 @@
 package Text::xSV;
-$VERSION = 0.17;
+$VERSION = 0.18;
 use strict;
 use Carp;
 
@@ -336,12 +336,6 @@ sub new {
 
   my %args = (
     error_handler => \&confess,
-    warning_handler => sub {
-      eval {
-        $self->error_handler(@_);
-      };
-      warn $@ if $@;
-    },
     filter => sub {my $line = shift; $line =~ s/\r$//; $line;},
     sep => ",",
     row_size_warning => 1,
@@ -444,7 +438,13 @@ sub set_sep {
 
 sub warning_handler {
   my $self = shift;
-  $self->{warning_handler}->(@_);
+  if ($self->{warning_handler}) {
+    $self->{warning_handler}->(@_);
+  }
+  else {
+    eval { $self->{error_handler}->(@_) };
+    warn $@ if $@;
+  }
 }
 
 sub DESTROY {
@@ -600,9 +600,9 @@ perfectly in all circumstances.
 =item C<set_warning_handler>
 
 The warning handler is an anonymous function which is expected to
-take a warning and do something useful with it.  The default
-warning handler just wraps the error_handler in C<eval> and
-passes along $@.
+take a warning and do something useful with it.  If no warning
+handler is supplied, the error handler is wrapped with C<eval>
+and the trapped error is warned.
 
 =item C<set_filter>
 
