@@ -1,5 +1,5 @@
 package Text::xSV;
-$VERSION = 0.18;
+$VERSION = 0.19;
 use strict;
 use Carp;
 
@@ -176,21 +176,24 @@ sub format_row {
   foreach my $value (@_) {
     if (not defined($value)) {
       # Empty fields are undef
-      push @row, "";
+      push @row, $self->{quote_all} ? qq("") : "";
     }
     elsif ("" eq $value) {
-      # The empty string has to be quoted.
-      push @row, qq("");
+      # The empty string has to be quoted unless dont_quote is set
+      push @row, $self->{dont_quote} ? "" : qq{""};
     }
     elsif ($value =~ /\s|\Q$sep\E|"/) {
       # quote it
       local $_ = $value;
       s/"/""/g;
-      push @row, qq("$_");
+      # If dont_quote is set, just output the data element,
+      # otherwise follow the 'proper' CSV quoted format (that breaks
+      # MS SQL Server's bulk insert on date values)
+      push @row, $self->{dont_quote} ? $_ : qq{"$_"};
     }
     else {
-      # Unquoted is fine
-      push @row, $value;
+      # Unquoted is fine (that is, unless the quote_all option is set)
+      push @row, $self->{quote_all} ? qq("$value") : $value;
     }
   }
   my $row = join $sep, @row;
@@ -327,6 +330,18 @@ foreach my $accessor (@normal_accessors) {
   no strict 'refs';
   *{"set_$accessor"} = sub {
     $_[0]->{$accessor} = $_[1];
+  };
+}
+
+# These two are mutually exclusive
+foreach my $accessor (qw(dont_quote quote_all)) {
+  no strict 'refs';
+  *{"set_$accessor"} = sub {
+    my $self = shift;
+    $self->{$accessor} = shift;
+    if ($self->{dont_quote} and $self->{quote_all}) {
+      $self->error_handler("Can't set both dont_quote and quote_all");
+    }
   };
 }
 
@@ -612,6 +627,21 @@ default filter removes \r so that Windows files can be read under
 Unix.  This could also be used to, eg, strip out Microsoft smart
 quotes.
 
+=item C<set_quote_qll>
+
+The quote_all option simply puts every output field into
+double quotation marks.  This can't be set if C<dont_quote> is.
+
+=item C<set_dont_quote>
+
+The dont_quote option turns off the otherwise mandatory quotation marks
+that bracket the data fields when there are separator characters, spaces
+or other non-printable characters in the data field.  This is perhaps a
+bit antithetical to the idea of safely enclosing data fields in
+quotation marks, but some applications, for instance Microsoft SQL
+Server's BULK INSERT, can't handle them.  This can't be set if
+C<quote_all> is.
+
 =item C<set_row_size>
 
 The number of elements that you expect to see in each row.  It
@@ -812,6 +842,8 @@ bug.  I fixed it.
 Carey Drake and Steve Caldwell noticed that the default
 warning_handler expected different arguments than it got.  Both
 suggested the same fix that I implemented.
+
+Geoff Gariepy suggested adding dont_quote and quote_all.
 
 =head1 AUTHOR AND COPYRIGHT
 

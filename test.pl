@@ -7,7 +7,7 @@
 # Change 1..1 below to 1..last_test_to_print .
 # (It may become useful if the test is moved to ./t subdirectory.)
 
-BEGIN { $| = 1; print "1..44\n"; }
+BEGIN { $| = 1; print "1..48\n"; }
 END {print "not ok 1\n" unless $loaded;}
 use Text::xSV;
 $loaded = 1;
@@ -153,15 +153,26 @@ my $temp_file = "temp.csv";
 
 $csv = Text::xSV->new(filename => $temp_file);
 
-$csv->print_row(qw(a b c));
-$csv->print_row(qw(x y z));
+$csv->print_row(qw(a b c d));
+$csv->print_row("hello", "", undef, "with space");
+
+$csv->set_dont_quote(1);
+ok();
+$csv->print_row("hello", "", undef, "with space");
+
+$csv->set_dont_quote(0);
+$csv->set_quote_all(1);
+ok();
+$csv->print_row("hello", "", undef, "with space");
 
 $csv = undef; # Should delete the object.
 
 $csv = Text::xSV->new(filename => $temp_file);
 
-test_arrays_match([qw(a b c)], scalar $csv->get_row());
-test_arrays_match([qw(x y z)], scalar $csv->get_row());
+test_arrays_match([qw(a b c d)], scalar $csv->get_row());
+test_arrays_match(["hello", "", undef, "with space"], scalar $csv->get_row());
+test_next_line_is("hello,,,with space\n");
+test_next_line_is(qq{"hello","","","with space"\n});
 
 exit;
 
@@ -207,4 +218,17 @@ sub test_row {
   } 
   #print STDERR $csv->extract("test"), "\n";
   test_arrays_match([@_], [$csv->extract("one", "two")]);
+}
+
+sub test_next_line_is {
+  my $fh = $csv->{fh};
+  my $next_line = <$fh>;
+  my $expected = shift;
+  if ($next_line eq $expected) {
+    ok();
+  }
+  else {
+    print STDERR "Wrong next line!\n  Expected: $expected  Got: $next_line";
+    not_ok();
+  }
 }

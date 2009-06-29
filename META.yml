@@ -1,6 +1,6 @@
 ---
 name: Text-xSV
-version: 0.18
+version: 0.19
 author: []
 abstract: read character separated files
 license: perl
@@ -9,7 +9,7 @@ resources:
 provides:
   Text::xSV:
     file: lib/Text/xSV.pm
-    version: 0.18
+    version: 0.19
 generated_by: Module::Build version 0.2806
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.2.html
