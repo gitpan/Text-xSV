@@ -1,5 +1,5 @@
 package Text::xSV;
-$VERSION = 0.19;
+$VERSION = 0.20;
 use strict;
 use Carp;
 
@@ -256,16 +256,17 @@ sub get_fields {
     my @row;
     my $q_sep = quotemeta($self->{sep});
     my $match_sep = qr/\G$q_sep/;
-    my $start_field = qr/\G(")|\G([^"$q_sep]*)/;
+    my $start_field = qr/\G(")/;
+    my $start_field_ms = qr/\G([^"$q_sep]*)/;
 
     # This loop is the heart of the engine
-    while ($line =~ /$start_field/g) {
-      if ($1) {
+    while ($line =~ /$start_field/gc or $line =~ /$start_field_ms/gc ) {
+      if ($1 eq '"') {
         push @row, _get_quoted();
       }
       else {
         # Needed for Microsoft compatibility
-        push @row, length($2) ? $2 : undef;
+        push @row, length($1) ? $1 : undef;
       }
       my $pos = pos($line);
       if ($line !~ /$match_sep/g) {
@@ -347,7 +348,11 @@ foreach my $accessor (qw(dont_quote quote_all)) {
 
 sub new {
   my $self = bless ({}, shift);
-  my %allowed = map { $_=>1 } @normal_accessors, qw(header headers row sep);
+  my %allowed = map {
+                  $_=>1
+                } @normal_accessors, qw(
+                  header headers row sep dont_quote quote_all
+                );
 
   my %args = (
     error_handler => \&confess,
@@ -843,7 +848,10 @@ Carey Drake and Steve Caldwell noticed that the default
 warning_handler expected different arguments than it got.  Both
 suggested the same fix that I implemented.
 
-Geoff Gariepy suggested adding dont_quote and quote_all.
+Geoff Gariepy suggested adding dont_quote and quote_all.  Then found a
+silly bug in my first implementation.
+
+Ryan Martin improved read performance over 75% with a small patch.
 
 =head1 AUTHOR AND COPYRIGHT
 
