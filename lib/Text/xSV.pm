@@ -1,5 +1,5 @@
 package Text::xSV;
-$VERSION = 0.20;
+$VERSION = 0.21;
 use strict;
 use Carp;
 
@@ -273,11 +273,31 @@ sub get_fields {
         if ($pos == length($line)) {
           return @row;
         }
-        else {
+        elsif ($self->{strict}) {
           my $expected = "Expected '$self->{sep}'";
           $is_error = 1;
           return $self->error_handler(
             "$expected at $self->{filename}, line $., char $pos");
+        }
+        else {
+          TRY: {
+            my $expected = "Expected '$self->{sep}'";
+            $self->warning_handler(
+              "$expected at $self->{filename}, line $., char $pos");
+
+            # Assume we are in non-strict mode and encountered a single "
+            # so we need to recover and finish my quoted field.
+            $row[-1] .= '"' . _get_quoted();
+            $pos = pos($line);
+            if ($line !~ /$match_sep/g) {
+              if ($pos == length($line)) {
+                return @row;
+              }
+              else {
+                redo TRY;
+              }
+            }
+          }
         }
       }
     }
@@ -325,7 +345,7 @@ sub get_fields {
 
 my @normal_accessors = qw(
   close_fh error_handler warning_handler filename filter fh
-  row_size row_size_warning
+  row_size row_size_warning strict
 );
 foreach my $accessor (@normal_accessors) {
   no strict 'refs';
@@ -360,6 +380,7 @@ sub new {
     sep => ",",
     row_size_warning => 1,
     close_fh => 0,
+    strict => 1,
     @_
   );
   # Note, must set error_handler and warning_handler first because they
@@ -555,13 +576,13 @@ extent that you don't do this consistently, your code will be buggy.)
 Therefore you it is good for the parsing logic to have access to the
 whole file.
 
-This module solves the problem by creating a CSV object with access to
+This module solves the problem by creating a xSV object with access to
 the filehandle, if in parsing it notices that a new line is needed, it
 can read at will.
 
 =head1 USAGE
 
-First you set up and initialize an object, then you read the CSV file
+First you set up and initialize an object, then you read the xSV file
 through it.  The creation can also do multiple initializations as
 well.  Here are the available methods
 
@@ -666,6 +687,11 @@ as undef, and extra fields are ignored.
 Whether or not to close fh when the object is DESTROYed.  Defaults
 to false if fh was passed in, or true if the object has to open its
 own fh.  (This may be removed in a future version.)
+
+=item C<set_strict>
+
+In strict mode a single " within a quoted field is an error.  In
+non-strict mode it is a warning.  The default is strict.
 
 =back
 
@@ -852,6 +878,9 @@ Geoff Gariepy suggested adding dont_quote and quote_all.  Then found a
 silly bug in my first implementation.
 
 Ryan Martin improved read performance over 75% with a small patch.
+
+Bauernhaus Panoramablick and Geoff Gariepy convinced me to add the
+ability to get non-strict mode.
 
 =head1 AUTHOR AND COPYRIGHT
 
